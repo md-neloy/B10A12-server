@@ -31,6 +31,18 @@ async function run() {
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!"
     );
+
+    const AllClassesCollection = client
+      .db("Smart-Learning")
+      .collection("AllClasses");
+
+    app.get("/classes", async (req, res) => {
+      const result = await AllClassesCollection.find()
+        .sort({ enroll: -1 })
+        .limit(6)
+        .toArray();
+      res.send(result);
+    });
   } finally {
     // Ensures that the client will close when you finish/error
     // await client.close();
