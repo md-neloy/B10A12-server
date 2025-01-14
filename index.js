@@ -35,6 +35,10 @@ async function run() {
     const AllClassesCollection = client
       .db("Smart-Learning")
       .collection("AllClasses");
+    const feedbackCollection = client
+      .db("Smart-Learning")
+      .collection("feedback");
+    const usersCollection = client.db("Smart-Learning").collection("users");
 
     app.get("/classes", async (req, res) => {
       const result = await AllClassesCollection.find()
@@ -42,6 +46,26 @@ async function run() {
         .limit(6)
         .toArray();
       res.send(result);
+    });
+    app.get("/feedback", async (req, res) => {
+      const result = await feedbackCollection.find().toArray();
+      res.send(result);
+    });
+    // total user, classes, enrollment count
+    app.get("/totalCount", async (req, res) => {
+      const allClasses = await AllClassesCollection.estimatedDocumentCount();
+      const alluser = await usersCollection.estimatedDocumentCount();
+      const totalEnroll = await AllClassesCollection.aggregate([
+        {
+          $group: {
+            _id: null,
+            totalenroll: { $sum: "$enroll" },
+          },
+        },
+      ]).toArray();
+      const total = totalEnroll[0]?.totalenroll || 0;
+
+      res.send({ allClasses, alluser, totalEnroll: total });
     });
   } finally {
     // Ensures that the client will close when you finish/error
