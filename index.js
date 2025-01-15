@@ -39,6 +39,9 @@ async function run() {
       .db("Smart-Learning")
       .collection("feedback");
     const usersCollection = client.db("Smart-Learning").collection("users");
+    const teachersCollection = client
+      .db("Smart-Learning")
+      .collection("teachers");
 
     app.get("/classes", async (req, res) => {
       const result = await AllClassesCollection.find()
@@ -47,9 +50,27 @@ async function run() {
         .toArray();
       res.send(result);
     });
+
+    app.get("/allclasses", async (req, res) => {
+      const limit = parseInt(req.query.limit);
+      const page = parseInt(req.query.page);
+      const skip = page * limit;
+      const result = await AllClassesCollection.find()
+        .skip(skip)
+        .limit(limit)
+        .toArray();
+      res.send(result);
+    });
+
     app.get("/feedback", async (req, res) => {
       const result = await feedbackCollection.find().toArray();
       res.send(result);
+    });
+    // api for teacher related
+    app.post("/teacher", async (req, res) => {
+      const body = req.body;
+      const result = await teachersCollection.insertOne(body);
+      res.send();
     });
     // total user, classes, enrollment count
     app.get("/totalCount", async (req, res) => {
