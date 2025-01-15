@@ -2,7 +2,9 @@ require("dotenv").config();
 const express = require("express");
 const app = express();
 const cors = require("cors");
-const { MongoClient, ServerApiVersion } = require("mongodb");
+const stripe = require("stripe")(process.env.stripe_secrate_key);
+const jwt = require("jsonwebtoken");
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const port = process.env.PORT || 5050;
 
 // middlewire
@@ -43,6 +45,21 @@ async function run() {
       .db("Smart-Learning")
       .collection("teachers");
 
+    // jwt related
+    app.post("/jwt", (req, res) => {
+      const user = req.body;
+      const token = jwt.sign(user, process.env.jwt_Token_Secrate, {
+        expiresIn: "24h",
+      });
+      res.send({ token });
+    });
+
+    app.get("/classes/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await AllClassesCollection.findOne(query);
+      res.send(result);
+    });
     app.get("/classes", async (req, res) => {
       const result = await AllClassesCollection.find()
         .sort({ enroll: -1 })
@@ -60,6 +77,20 @@ async function run() {
         .limit(limit)
         .toArray();
       res.send(result);
+    });
+    // stripe api
+    app.post("/create-payment-intent", async (req, res) => {
+      const { price } = req.body;
+      const amount = parseInt(price * 100);
+
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: amount,
+        currency: "usd",
+        payment_method_types: ["card"],
+      });
+      res.send({
+        clientSecret: paymentIntent.client_secret,
+      });
     });
 
     app.get("/feedback", async (req, res) => {
