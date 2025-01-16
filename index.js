@@ -163,6 +163,24 @@ async function run() {
       }
     );
 
+    // find all teacher or pending teacher
+    app.get("/rqTeacher", verifyToken, verifyAdmin, async (req, res) => {
+      const query = { status: { $ne: "reject" } };
+      const result = await teachersCollection.find(query).toArray();
+      res.send(result);
+    });
+    // get all classes for admin
+    app.get(
+      "/getClasses-forAdmin",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        const query = { status: { $ne: "reject" } };
+        const result = await AllClassesCollection.find(query).toArray();
+        res.send(result);
+      }
+    );
+
     app.get("/classes/:id", async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
