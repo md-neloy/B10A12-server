@@ -44,6 +44,7 @@ async function run() {
     const teachersCollection = client
       .db("Smart-Learning")
       .collection("teachers");
+    const enrollCollection = client.db("Smart-Learning").collection("enroll");
 
     // token verify middlewire
     const verifyToken = (req, res, next) => {
@@ -126,6 +127,27 @@ async function run() {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const result = await AllClassesCollection.findOne(query);
+      res.send(result);
+    });
+    app.patch("/classenroll-update/:id", async (req, res) => {
+      const id = req.params.id;
+      const email = req.query.email;
+      const name = req.query.name;
+      const enrollInfo = {
+        name: name,
+        email: email,
+        class: id,
+      };
+      const enroll = await enrollCollection.insertOne(enrollInfo);
+      const query = { _id: new ObjectId(id) };
+      const find = await AllClassesCollection.findOne(query);
+      const updateEnroll = parseInt(find.enroll) + 1;
+      const update = {
+        $set: {
+          enroll: updateEnroll,
+        },
+      };
+      const result = await AllClassesCollection.updateOne(query, update);
       res.send(result);
     });
     app.get("/classes", async (req, res) => {
