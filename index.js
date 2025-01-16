@@ -124,8 +124,100 @@ async function run() {
       res.send({ isTeacher });
     });
 
-    // allUser
-    app.post("/users", async (req, res) => {
+    // find all teacher or pending teacher for admin
+    app.get("/rqTeacher", verifyToken, verifyAdmin, async (req, res) => {
+      const limit = parseInt(req.query.limit);
+      const page = parseInt(req.query.page);
+      const skip = limit * page;
+      // const query = { status: { $ne: "reject" } };
+      const result = await teachersCollection
+        .find()
+        .skip(skip)
+        .limit(limit)
+        .toArray();
+      res.send(result);
+    });
+    // find teachcollection length for admin pagination
+    app.get("/techerRqCount", verifyToken, verifyAdmin, async (req, res) => {
+      const result = await teachersCollection.countDocuments();
+      res.send({ result });
+    });
+    // get all classes for admin by pagination
+    app.get(
+      "/getClasses-forAdmin",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        const page = parseInt(req.query.page);
+        const limit = parseInt(req.query.limit);
+        const skip = page * limit;
+        const query = { status: { $ne: "reject" } };
+        const result = await AllClassesCollection.find(query)
+          .skip(skip)
+          .limit(limit)
+          .toArray();
+        res.send(result);
+      }
+    );
+
+    // get class count for the admin pagination
+    app.get(
+      "/adminClassPagination",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        const query = { status: { $ne: "reject" } };
+        const result = await AllClassesCollection.countDocuments(query);
+        res.send({ result });
+      }
+    );
+    // make user admin
+    app.patch(
+      "/users/makeAdmin/:id",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        const userId = req.params.id;
+        const result = await usersCollection.updateOne(
+          { _id: new ObjectId(userId) },
+          { $set: { role: "admin" } }
+        );
+        res.send(result);
+      }
+    );
+    // get user for admin
+    app.get("/alluser-admin", verifyToken, verifyAdmin, async (req, res) => {
+      const searchQuery = req.query.search || "";
+      const query = {
+        $or: [
+          { name: { $regex: searchQuery, $options: "i" } },
+          { email: { $regex: searchQuery, $options: "i" } },
+        ],
+      };
+      const page = parseInt(req.query.page);
+      const limit = parseInt(req.query.limit);
+      const skip = page * limit;
+      const result = await usersCollection
+        .find(query)
+        .skip(skip)
+        .limit(limit)
+        .toArray();
+      res.send(result);
+    });
+
+    // get all user count for admin pagination
+    app.get(
+      "/alluser-admin-count",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        const result = await usersCollection.countDocuments();
+        res.send({ result });
+      }
+    );
+
+    // api for login or register user
+    app.post("/users", verifyToken, async (req, res) => {
       const user = req.body;
       const query = { email: user.email };
       const existingUser = await usersCollection.findOne(query);
@@ -133,13 +225,6 @@ async function run() {
         return res.send({ message: "user already existis", insertedId: null });
       }
       const result = await usersCollection.insertOne(user);
-      res.send(result);
-    });
-    // user profile
-    app.get("/user/profile/:email", async (req, res) => {
-      const email = req.params.email;
-      const query = { email: email };
-      const result = await usersCollection.findOne(query);
       res.send(result);
     });
 
@@ -163,23 +248,70 @@ async function run() {
       }
     );
 
-    // find all teacher or pending teacher
-    app.get("/rqTeacher", verifyToken, verifyAdmin, async (req, res) => {
-      const query = { status: { $ne: "reject" } };
-      const result = await teachersCollection.find(query).toArray();
+    // api for teacher request
+    app.get("/teacherReq/:email", verifyToken, async (req, res) => {
+      const email = req.params.email;
+      const query = { email: email };
+      const existingUser = await teachersCollection.findOne(query);
+      if (!existingUser) {
+        return res.send(false);
+      }
+      const result = existingUser.status;
       res.send(result);
     });
-    // get all classes for admin
-    app.get(
-      "/getClasses-forAdmin",
+
+    // api for teacher request approved or reject
+    app.patch(
+      "/class-request/:id",
       verifyToken,
       verifyAdmin,
       async (req, res) => {
-        const query = { status: { $ne: "reject" } };
-        const result = await AllClassesCollection.find(query).toArray();
-        res.send(result);
+        const message = req.query.message;
+        const id = req.params.id;
+        const query = { _id: new ObjectId(id) };
+        if (message === "approved") {
+          const update = {
+            $set: {
+              status: "approved",
+            },
+          };
+          const findEmail = await teachersCollection.findOne(query);
+          const email = { email: findEmail.email };
+          const updateUserStatus = {
+            $set: {
+              role: "teacher",
+            },
+          };
+          const userUpdate = await usersCollection.updateOne(
+            email,
+            updateUserStatus
+          );
+          const result = await teachersCollection.updateOne(query, update);
+          return res.send(result);
+        } else {
+          const update = {
+            $set: {
+              status: "reject",
+            },
+          };
+          const result = await teachersCollection.updateOne(query, update);
+          return res.send(result);
+        }
       }
     );
+
+    // =========================  public api ===================================
+
+    // user profile
+    app.get("/user/profile/:email", verifyToken, async (req, res) => {
+      const email = req.params.email;
+      if (email !== req.decoded.email) {
+        return res.status(403).send({ message: "forbidden access" });
+      }
+      const query = { email: email };
+      const result = await usersCollection.findOne(query);
+      res.send(result);
+    });
 
     app.get("/classes/:id", async (req, res) => {
       const id = req.params.id;
@@ -187,7 +319,7 @@ async function run() {
       const result = await AllClassesCollection.findOne(query);
       res.send(result);
     });
-    app.patch("/classenroll-update/:id", async (req, res) => {
+    app.patch("/classenroll-update/:id", verifyToken, async (req, res) => {
       const id = req.params.id;
       const email = req.query.email;
       const name = req.query.name;
@@ -210,8 +342,11 @@ async function run() {
     });
 
     // find the enroll classes
-    app.get("/Enrollclasses/:email", async (req, res) => {
+    app.get("/Enrollclasses/:email", verifyToken, async (req, res) => {
       const email = req.params.email;
+      if (email !== req.decoded.email) {
+        return res.status(403).send({ message: "forbidden access" });
+      }
       const query = { email: email };
       const enrollments = await enrollCollection.find(query).toArray();
 
@@ -226,6 +361,7 @@ async function run() {
       );
       res.send(enrolledClasses);
     });
+    // public api for top enroll section
     app.get("/classes", async (req, res) => {
       const result = await AllClassesCollection.find()
         .sort({ enroll: -1 })
@@ -246,7 +382,7 @@ async function run() {
       res.send(result);
     });
     // stripe api
-    app.post("/create-payment-intent", async (req, res) => {
+    app.post("/create-payment-intent", verifyToken, async (req, res) => {
       const { price } = req.body;
       const amount = parseInt(price * 100);
 
@@ -265,21 +401,12 @@ async function run() {
       res.send(result);
     });
     // api for teacher related
-    app.post("/teacher", async (req, res) => {
+    app.post("/teacher", verifyToken, async (req, res) => {
       const body = req.body;
       const result = await teachersCollection.insertOne(body);
       res.send();
     });
-    app.get("/teacherReq/:email", async (req, res) => {
-      const email = req.params.email;
-      const query = { email: email };
-      const existingUser = await teachersCollection.findOne(query);
-      if (!existingUser) {
-        return res.send(false);
-      }
-      const result = existingUser.status;
-      res.send(result);
-    });
+
     // total user, classes, enrollment count
     app.get("/totalCount", async (req, res) => {
       const query = { status: "approved" };
