@@ -45,6 +45,9 @@ async function run() {
       .db("Smart-Learning")
       .collection("teachers");
     const enrollCollection = client.db("Smart-Learning").collection("enroll");
+    const assignmentsCollection = client
+      .db("Smart-Learning")
+      .collection("assignments");
 
     // token verify middlewire
     const verifyToken = (req, res, next) => {
@@ -72,6 +75,25 @@ async function run() {
       }
       next();
     };
+    // user verify teacher after verify token
+    const verifyTeacher = async (req, res, next) => {
+      const email = req.decoded.email;
+      const query = { email: email };
+      const user = await usersCollection.findOne(query);
+      const isTeacher = user?.role === "teacher";
+      if (!isTeacher) {
+        return res.status(403).send({ message: "forbidden access" });
+      }
+      next();
+    };
+    // jwt related
+    app.post("/jwt", (req, res) => {
+      const user = req.body;
+      const token = jwt.sign(user, process.env.jwt_Token_Secrate, {
+        expiresIn: "24h",
+      });
+      res.send({ token });
+    });
 
     // admin email verification
     app.get("/user/admin/:email", verifyToken, async (req, res) => {
@@ -113,15 +135,33 @@ async function run() {
       const result = await usersCollection.insertOne(user);
       res.send(result);
     });
-
-    // jwt related
-    app.post("/jwt", (req, res) => {
-      const user = req.body;
-      const token = jwt.sign(user, process.env.jwt_Token_Secrate, {
-        expiresIn: "24h",
-      });
-      res.send({ token });
+    // user profile
+    app.get("/user/profile/:email", async (req, res) => {
+      const email = req.params.email;
+      const query = { email: email };
+      const result = await usersCollection.findOne(query);
+      res.send(result);
     });
+
+    // add class by teacher verfication after verifyToken
+    app.post("/addClass", verifyToken, verifyTeacher, async (req, res) => {
+      const body = req.body;
+      const result = await AllClassesCollection.insertOne(body);
+      res.send(result);
+    });
+
+    // find added class by teacher
+    app.get(
+      "/findClass/:email",
+      verifyToken,
+      verifyTeacher,
+      async (req, res) => {
+        const email = req.params.email;
+        const query = { email: email };
+        const result = await AllClassesCollection.find(query).toArray();
+        res.send(result);
+      }
+    );
 
     app.get("/classes/:id", async (req, res) => {
       const id = req.params.id;
@@ -150,6 +190,24 @@ async function run() {
       const result = await AllClassesCollection.updateOne(query, update);
       res.send(result);
     });
+
+    // find the enroll classes
+    app.get("/Enrollclasses/:email", async (req, res) => {
+      const email = req.params.email;
+      const query = { email: email };
+      const enrollments = await enrollCollection.find(query).toArray();
+
+      // fetch the classes
+      const enrolledClasses = await Promise.all(
+        enrollments.map(async (enrollment) => {
+          const classId = enrollment.class;
+          const id = { _id: new ObjectId(classId) };
+          const classDetails = await AllClassesCollection.findOne(id);
+          return classDetails;
+        })
+      );
+      res.send(enrolledClasses);
+    });
     app.get("/classes", async (req, res) => {
       const result = await AllClassesCollection.find()
         .sort({ enroll: -1 })
@@ -162,7 +220,8 @@ async function run() {
       const limit = parseInt(req.query.limit);
       const page = parseInt(req.query.page);
       const skip = page * limit;
-      const result = await AllClassesCollection.find()
+      const status = { status: "approved" };
+      const result = await AllClassesCollection.find(status)
         .skip(skip)
         .limit(limit)
         .toArray();
@@ -193,9 +252,20 @@ async function run() {
       const result = await teachersCollection.insertOne(body);
       res.send();
     });
+    app.get("/teacherReq/:email", async (req, res) => {
+      const email = req.params.email;
+      const query = { email: email };
+      const existingUser = await teachersCollection.findOne(query);
+      if (!existingUser) {
+        return res.send(false);
+      }
+      const result = existingUser.status;
+      res.send(result);
+    });
     // total user, classes, enrollment count
     app.get("/totalCount", async (req, res) => {
-      const allClasses = await AllClassesCollection.estimatedDocumentCount();
+      const query = { status: "approved" };
+      const allClasses = await AllClassesCollection.countDocuments(query);
       const alluser = await usersCollection.estimatedDocumentCount();
       const totalEnroll = await AllClassesCollection.aggregate([
         {
