@@ -171,6 +171,34 @@ async function run() {
         res.send({ result });
       }
     );
+    // approved or reject class by admin
+    app.patch(
+      "/approved-reject-class/:id",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        const message = req.query.message;
+        const id = req.params.id;
+        const query = { _id: new ObjectId(id) };
+        if (message === "approved") {
+          const update = {
+            $set: {
+              status: "approved",
+            },
+          };
+          const result = await AllClassesCollection.updateOne(query, update);
+          res.send(result);
+        } else {
+          const update = {
+            $set: {
+              status: "reject",
+            },
+          };
+          const result = await AllClassesCollection.updateOne(query, update);
+          res.send(result);
+        }
+      }
+    );
     // make user admin
     app.patch(
       "/users/makeAdmin/:id",
@@ -299,6 +327,22 @@ async function run() {
         }
       }
     );
+
+    // delete the class from teacher or admin side
+    app.delete("/delete-class/:id", verifyToken, async (req, res) => {
+      const email = req.query.email;
+      const query = { email: email };
+      const find = await usersCollection.findOne(query);
+      const status = find.role;
+      if (status === "teacher" || status === "admin") {
+        const id = req.params.id;
+        const deleteQuery = { _id: new ObjectId(id) };
+        const result = await AllClassesCollection.deleteOne(deleteQuery);
+        res.send(result);
+      } else {
+        res.status(403).send({ message: "unauthorized access" });
+      }
+    });
 
     // =========================  public api ===================================
 
