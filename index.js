@@ -344,6 +344,34 @@ async function run() {
       }
     });
 
+    // update the class from the teacher or admin side
+
+    app.patch("/update-class/:id", verifyToken, async (req, res) => {
+      const email = req.query.email;
+      const query = { email: email };
+      const find = await usersCollection.findOne(query);
+      const status = find.role;
+      if (status === "teacher" || status === "admin") {
+        const id = req.params.id;
+        const body = req.body;
+        const updateQuery = { _id: new ObjectId(id) };
+        const updateInfo = {
+          $set: {
+            title: body.title,
+            price: body.price,
+            image: body.image,
+            description: body.description,
+          },
+        };
+        const result = await AllClassesCollection.updateOne(
+          updateQuery,
+          updateInfo
+        );
+        res.send(result);
+      } else {
+        res.status(403).send({ message: "unauthorized access" });
+      }
+    });
     // =========================  public api ===================================
 
     // user profile
@@ -365,11 +393,11 @@ async function run() {
     });
     app.patch("/classenroll-update/:id", verifyToken, async (req, res) => {
       const id = req.params.id;
-      const email = req.query.email;
-      const name = req.query.name;
+      const body = req.body;
       const enrollInfo = {
-        name: name,
-        email: email,
+        name: body.name,
+        email: body.email,
+        transactionId: body.transactionId,
         class: id,
       };
       const enroll = await enrollCollection.insertOne(enrollInfo);
