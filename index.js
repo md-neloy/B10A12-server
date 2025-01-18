@@ -245,7 +245,7 @@ async function run() {
     );
 
     // api for login or register user
-    app.post("/users", verifyToken, async (req, res) => {
+    app.post("/users", async (req, res) => {
       const user = req.body;
       const query = { email: user.email };
       const existingUser = await usersCollection.findOne(query);
@@ -261,6 +261,66 @@ async function run() {
       const body = req.body;
       const result = await AllClassesCollection.insertOne(body);
       res.send(result);
+    });
+
+    // add assignment by teacher or admin
+    app.post("/add-assignment", verifyToken, async (req, res) => {
+      const email = req.query.email;
+      const query = { email: email };
+      const find = await usersCollection.findOne(query);
+      const status = find.role;
+      if (status === "teacher" || status === "admin") {
+        const body = req.body;
+        const classId = body.classId;
+        const queryId = { _id: new ObjectId(classId) };
+        const findClass = await AllClassesCollection.findOne(queryId);
+        const assignment = findClass.assignments + 1;
+        const updateClass = {
+          $set: {
+            assignments: assignment,
+          },
+        };
+        const updateResult = await AllClassesCollection.updateOne(
+          queryId,
+          updateClass
+        );
+        const result = await assignmentsCollection.insertOne(body);
+        res.send(result);
+      } else {
+        res.status(403).send({ message: "unauthorized access" });
+      }
+    });
+    // find assignment
+    app.get("/find-assignment/:id", verifyToken, async (req, res) => {
+      const email = req.query.email;
+      const query = { email: email };
+      const user = await usersCollection.findOne(query);
+      const status = user.role;
+      const id = req.params.id;
+      if (!user) {
+        return res.status(401).send("unauthorized access");
+      } else if (status === "admin" || status === "teacher") {
+        const queryId = { classId: id };
+        const result = await assignmentsCollection.find(queryId).toArray();
+        res.send(result);
+      } else if (status === "student") {
+        const queryId = { classId: id };
+        const enrollment = await enrollCollection.findOne({
+          classId: id,
+          email: email,
+        });
+
+        if (!enrollment) {
+          return res
+            .status(403)
+            .send("Forbidden access: Not enrolled in this class");
+        }
+        // Fetch assignments if enrolled
+        const assignments = await assignmentsCollection.find(queryId).toArray();
+        return res.send(assignments);
+      } else {
+        return res.status(403).send("Forbidden access");
+      }
     });
 
     // find added class by teacher
@@ -385,7 +445,7 @@ async function run() {
       res.send(result);
     });
 
-    app.get("/classes/:id", async (req, res) => {
+    app.get("/classes/:id", verifyToken, async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const result = await AllClassesCollection.findOne(query);
@@ -398,7 +458,7 @@ async function run() {
         name: body.name,
         email: body.email,
         transactionId: body.transactionId,
-        class: id,
+        classId: id,
       };
       const enroll = await enrollCollection.insertOne(enrollInfo);
       const query = { _id: new ObjectId(id) };
@@ -425,7 +485,7 @@ async function run() {
       // fetch the classes
       const enrolledClasses = await Promise.all(
         enrollments.map(async (enrollment) => {
-          const classId = enrollment.class;
+          const classId = enrollment.classId;
           const id = { _id: new ObjectId(classId) };
           const classDetails = await AllClassesCollection.findOne(id);
           return classDetails;
