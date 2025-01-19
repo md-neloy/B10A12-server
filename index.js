@@ -27,12 +27,12 @@ const client = new MongoClient(uri, {
 async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
-    await client.connect();
+    // await client.connect();
     // Send a ping to confirm a successful connection
-    await client.db("admin").command({ ping: 1 });
-    console.log(
-      "Pinged your deployment. You successfully connected to MongoDB!"
-    );
+    // await client.db("admin").command({ ping: 1 });
+    // console.log(
+    //   "Pinged your deployment. You successfully connected to MongoDB!"
+    // );
 
     const AllClassesCollection = client
       .db("Smart-Learning")
@@ -45,6 +45,9 @@ async function run() {
       .db("Smart-Learning")
       .collection("teachers");
     const enrollCollection = client.db("Smart-Learning").collection("enroll");
+    const assignmentSubmisionCollection = client
+      .db("Smart-Learning")
+      .collection("assignmentSubmision");
     const assignmentsCollection = client
       .db("Smart-Learning")
       .collection("assignments");
@@ -82,6 +85,18 @@ async function run() {
       const user = await usersCollection.findOne(query);
       const isTeacher = user?.role === "teacher";
       if (!isTeacher) {
+        return res.status(403).send({ message: "forbidden access" });
+      }
+      next();
+    };
+
+    // verify student
+    const verifyStudent = async (req, res, next) => {
+      const email = req.decoded.email;
+      const query = { email: email };
+      const user = await usersCollection.findOne(query);
+      const isStudent = user?.role === "student";
+      if (!isStudent) {
         return res.status(403).send({ message: "forbidden access" });
       }
       next();
@@ -297,11 +312,18 @@ async function run() {
       const user = await usersCollection.findOne(query);
       const status = user.role;
       const id = req.params.id;
+      const page = parseInt(req.query.page);
+      const limit = parseInt(req.query.limit);
+      const skip = page * limit;
       if (!user) {
         return res.status(401).send("unauthorized access");
       } else if (status === "admin" || status === "teacher") {
         const queryId = { classId: id };
-        const result = await assignmentsCollection.find(queryId).toArray();
+        const result = await assignmentsCollection
+          .find(queryId)
+          .skip(skip)
+          .limit(limit)
+          .toArray();
         res.send(result);
       } else if (status === "student") {
         const queryId = { classId: id };
@@ -316,7 +338,11 @@ async function run() {
             .send("Forbidden access: Not enrolled in this class");
         }
         // Fetch assignments if enrolled
-        const assignments = await assignmentsCollection.find(queryId).toArray();
+        const assignments = await assignmentsCollection
+          .find(queryId)
+          .skip(skip)
+          .limit(limit)
+          .toArray();
         return res.send(assignments);
       } else {
         return res.status(403).send("Forbidden access");
@@ -331,7 +357,13 @@ async function run() {
       async (req, res) => {
         const email = req.params.email;
         const query = { email: email };
-        const result = await AllClassesCollection.find(query).toArray();
+        const page = parseInt(req.query.page);
+        const limit = parseInt(req.query.limit);
+        const skip = page * limit;
+        const result = await AllClassesCollection.find(query)
+          .skip(skip)
+          .limit(limit)
+          .toArray();
         res.send(result);
       }
     );
@@ -432,6 +464,71 @@ async function run() {
         res.status(403).send({ message: "unauthorized access" });
       }
     });
+    // check assignment by teacher or admin
+
+    app.get("/checkAssignment/:id", verifyToken, async (req, res) => {
+      const email = req.query.email;
+      const query = { email: email };
+      const find = await usersCollection.findOne(query);
+      const status = find.role;
+      if (status === "teacher" || status === "admin") {
+        const id = req.params.id; // assignment id
+        const queryAssignment = { assignmentId: id };
+        const result = await assignmentSubmisionCollection
+          .find(queryAssignment)
+          .toArray();
+        res.send(result);
+      } else {
+        res.status(403).send({ message: "unauthorized access" });
+      }
+    });
+
+    // student assignment submisstion api
+    app.post(
+      "/assignment-submit",
+      verifyToken,
+      verifyStudent,
+      async (req, res) => {
+        const body = req.body;
+        const queryId = { _id: new ObjectId(body.classId) }; // class Id for find the class
+        const findClass = await AllClassesCollection.findOne(queryId);
+        const updateClass = {
+          $set: {
+            submitedAssignments: parseInt(findClass.submitedAssignments) + 1,
+          },
+        };
+        const updateFindClass = await AllClassesCollection.updateOne(
+          queryId,
+          updateClass
+        );
+        const result = await assignmentSubmisionCollection.insertOne(body);
+        res.send(result);
+      }
+    );
+    // student feedback api
+    app.post(
+      "/student-feedback/:classId",
+      verifyToken,
+      verifyStudent,
+      async (req, res) => {
+        const classId = req.params.classId; //class id
+        const email = req.decoded.email; // student email
+        const enrollment = await enrollCollection.findOne({
+          classId: classId,
+          email: email,
+        });
+        if (!enrollment) {
+          return res
+            .status(403)
+            .send("Forbidden access: Not enrolled in this class");
+        } else {
+          const body = req.body;
+          const feedback = await feedbackCollection.insertOne(body);
+          return res.send(feedback);
+        }
+      }
+    );
+
     // =========================  public api ===================================
 
     // user profile
