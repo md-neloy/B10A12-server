@@ -310,7 +310,7 @@ async function run() {
       const email = req.query.email;
       const query = { email: email };
       const user = await usersCollection.findOne(query);
-      const status = user.role.toLowerCaser();
+      const status = user.role.toLowerCase();
       const id = req.params.id;
       const page = parseInt(req.query.page);
       const limit = parseInt(req.query.limit);
@@ -496,6 +496,18 @@ async function run() {
       async (req, res) => {
         const body = req.body;
         const queryId = { _id: new ObjectId(body.classId) }; // class Id for find the class
+        const assignmentId = { _id: new ObjectId(body.assignmentId) };
+        const assignment = await assignmentsCollection.findOne(assignmentId);
+        console.log(assignment);
+        const updateSubmisstion = {
+          $set: {
+            submitedAssignments: parseInt(assignment.submitedAssignments) + 1,
+          },
+        };
+        const updateTheAssignment = await assignmentsCollection.updateOne(
+          assignmentId,
+          updateSubmisstion
+        );
         const findClass = await AllClassesCollection.findOne(queryId);
         const updateClass = {
           $set: {
