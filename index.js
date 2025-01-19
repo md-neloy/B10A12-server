@@ -310,7 +310,7 @@ async function run() {
       const email = req.query.email;
       const query = { email: email };
       const user = await usersCollection.findOne(query);
-      const status = user.role;
+      const status = user.role.toLowerCaser();
       const id = req.params.id;
       const page = parseInt(req.query.page);
       const limit = parseInt(req.query.limit);
@@ -372,11 +372,16 @@ async function run() {
     app.get("/teacherReq/:email", verifyToken, async (req, res) => {
       const email = req.params.email;
       const query = { email: email };
-      const existingUser = await teachersCollection.findOne(query);
-      if (!existingUser) {
+      const existingUser = await teachersCollection
+        .find(query)
+        .sort({ _id: -1 })
+        .limit(1)
+        .toArray();
+      if (!existingUser || existingUser.length === 0) {
         return res.send(false);
       }
-      const result = existingUser.status;
+
+      const result = existingUser[0].status;
       res.send(result);
     });
 
@@ -612,17 +617,25 @@ async function run() {
     });
     // stripe api
     app.post("/create-payment-intent", verifyToken, async (req, res) => {
-      const { price } = req.body;
-      const amount = parseInt(price * 100);
+      try {
+        const { price } = req.body;
+        const amount = parseInt(price * 100); // Convert to cents
+        console.log(amount);
 
-      const paymentIntent = await stripe.paymentIntents.create({
-        amount: amount,
-        currency: "usd",
-        payment_method_types: ["card"],
-      });
-      res.send({
-        clientSecret: paymentIntent.client_secret,
-      });
+        const paymentIntent = await stripe.paymentIntents.create({
+          amount: amount,
+          currency: "usd",
+          payment_method_types: ["card"],
+        });
+        console.log(paymentIntent.client_secret);
+
+        res.send({
+          clientSecret: paymentIntent.client_secret,
+        });
+      } catch (error) {
+        console.error("Error creating payment intent:", error);
+        res.status(500).send({ error: "Internal Server Error" });
+      }
     });
 
     app.get("/feedback", async (req, res) => {
