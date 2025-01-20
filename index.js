@@ -475,18 +475,36 @@ async function run() {
       const email = req.query.email;
       const query = { email: email };
       const find = await usersCollection.findOne(query);
+      const page = parseInt(req.query.page);
+      const limit = parseInt(req.query.limit);
+      const skip = page * limit;
       const status = find.role;
       if (status === "teacher" || status === "admin") {
         const id = req.params.id; // assignment id
         const queryAssignment = { assignmentId: id };
         const result = await assignmentSubmisionCollection
           .find(queryAssignment)
+          .skip(skip)
+          .limit(limit)
           .toArray();
         res.send(result);
       } else {
         res.status(403).send({ message: "unauthorized access" });
       }
     });
+
+    // total assignment counst
+    app.get(
+      "/checkAssignment-count/:assignmentId",
+      verifyToken,
+      async (req, res) => {
+        const assignmentId = req.params.assignmentId;
+        const counts = await assignmentSubmisionCollection.countDocuments(
+          assignmentId
+        );
+        res.send({ counts });
+      }
+    );
 
     // student assignment submisstion api
     app.post(
