@@ -642,11 +642,12 @@ async function run() {
           },
         };
         const isTeacher = await teachersCollection
-          .find()
+          .find(query)
           .sort({ _id: -1 })
           .limit(1)
           .toArray();
-        if (isTeacher) {
+        if (isTeacher.length !== 0) {
+          console.log("find the teacher");
           const updateTeacherphoto = {
             $set: {
               name: body.name,
@@ -654,11 +655,9 @@ async function run() {
             },
           };
           const updateteacher = await teachersCollection.updateOne(
-            query,
+            { _id: new ObjectId(isTeacher[0]._id) },
             updateTeacherphoto
           );
-          const result = await usersCollection.updateOne(query, updateProfile);
-          res.send(result);
         }
         const result = await usersCollection.updateOne(query, updateProfile);
         res.send(result);
