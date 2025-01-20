@@ -627,6 +627,45 @@ async function run() {
         .toArray();
       res.send(result);
     });
+
+    // update profile
+    app.patch("/update-profile/:email", verifyToken, async (req, res) => {
+      const email = req.params.email;
+      if (email === req.decoded.email) {
+        const query = { email: email };
+        const body = req.body;
+        const updateProfile = {
+          $set: {
+            name: body.name,
+            image: body.image,
+            phone: body.number,
+          },
+        };
+        const isTeacher = await teachersCollection
+          .find()
+          .sort({ _id: -1 })
+          .limit(1)
+          .toArray();
+        if (isTeacher) {
+          const updateTeacherphoto = {
+            $set: {
+              name: body.name,
+              image: body.image,
+            },
+          };
+          const updateteacher = await teachersCollection.updateOne(
+            query,
+            updateTeacherphoto
+          );
+          const result = await usersCollection.updateOne(query, updateProfile);
+          res.send(result);
+        }
+        const result = await usersCollection.updateOne(query, updateProfile);
+        res.send(result);
+      } else {
+        res.status(403).send({ message: "unauthorized access" });
+      }
+    });
     // stripe api
     app.post("/create-payment-intent", verifyToken, async (req, res) => {
       try {
@@ -659,6 +698,13 @@ async function run() {
       const body = req.body;
       const result = await teachersCollection.insertOne(body);
       res.send();
+    });
+    //find all teacher who are approved
+    app.get("/find-approved-teacher", async (req, res) => {
+      const result = await teachersCollection
+        .find({ status: "approved" })
+        .toArray();
+      res.send(result);
     });
 
     // total user, classes, enrollment count
