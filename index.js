@@ -142,16 +142,29 @@ async function run() {
     app.get("/allTeachers-Rating", verifyToken, async (req, res) => {
       try {
         const result = await feedbackCollection
-          .find(
-            {}, // No filters, fetch all documents
-            { projection: { title: 1, rating: 1 } } // Project only title and rating
-          )
+          .aggregate([
+            {
+              $group: {
+                _id: "$title", // group by title
+                averageRating: { $avg: "$rating" },
+                totalFeedbacks: { $sum: 1 }, // optional: count of feedbacks per title
+              },
+            },
+            {
+              $project: {
+                _id: 0,
+                title: "$_id",
+                averageRating: { $round: ["$averageRating", 2] }, // round to 2 decimal places
+                totalFeedbacks: 1,
+              },
+            },
+          ])
           .toArray();
 
         res.send(result);
       } catch (error) {
-        console.error("Error fetching feedback with title and rating:", error);
-        res.status(500).send({ message: "Internal server error" });
+        console.error("Error:", error);
+        res.status(500).send({ message: "Failed to fetch data" });
       }
     });
 
