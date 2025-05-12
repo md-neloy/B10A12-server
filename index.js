@@ -138,6 +138,22 @@ async function run() {
       }
       res.send({ isTeacher });
     });
+    // find all teacher
+    app.get("/allTeachers-Rating", verifyToken, async (req, res) => {
+      try {
+        const result = await feedbackCollection
+          .find(
+            {}, // No filters, fetch all documents
+            { projection: { title: 1, rating: 1 } } // Project only title and rating
+          )
+          .toArray();
+
+        res.send(result);
+      } catch (error) {
+        console.error("Error fetching feedback with title and rating:", error);
+        res.status(500).send({ message: "Internal server error" });
+      }
+    });
 
     // find all teacher or pending teacher for admin
     app.get("/rqTeacher", verifyToken, verifyAdmin, async (req, res) => {
